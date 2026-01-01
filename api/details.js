@@ -1,48 +1,42 @@
+import { getClient } from './logic.js';
 import * as cheerio from 'cheerio';
-import { createClient } from '../lib/utils.js';
 
 export default async function handler(req, res) {
-  const { url } = req.query;
-  if (!url) return res.status(400).json({ error: 'Missing URL' });
+    const { url } = req.query;
+    const client = getClient();
 
-  const client = createClient();
+    try {
+        const { data } = await client.get(url);
+        const $ = cheerio.load(data);
 
-  try {
-    const { data } = await client.get(url);
-    const $ = cheerio.load(data);
+        // HDhub4uProvider.kt: select(".page-body h2...")
+        const title = $("h1.page-title span").text().trim() || $("title").text();
+        const poster = $("main.page-body img.aligncenter").attr("src");
+        
+        const links = [];
 
-    const title = $('h1.entry-title').text().trim().replace(/^Download\s+/i, '');
-    const poster = $('.entry-content img').first().attr('src') || '';
-    const links = [];
+        // HDhub4uProvider.kt: doc.select("h3 a:matches(...), h4 a:matches(...)")
+        $("h3 a, h4 a, .page-body > div a").each((_, el) => {
+            const href = $(el).attr("href");
+            const text = $(el).text();
 
-    $('a').each((_, el) => {
-      const txt = $(el).text().trim();
-      const href = $(el).attr('href');
-      
-      if (!href || href.startsWith('#') || href.startsWith('javascript')) return;
+            if (href && (href.includes("hubdrive") || href.includes("hubcloud") || href.includes("hblinks"))) {
+                // Determine quality based on text (Logic from Provider)
+                let quality = "SD";
+                if(text.includes("4K") || text.includes("2160")) quality = "4K";
+                else if(text.includes("1080")) quality = "1080p";
+                else if(text.includes("720")) quality = "720p";
 
-      const lowerTxt = txt.toLowerCase();
-      // Filter for valid resolution links
-      if (lowerTxt.includes('480p') || lowerTxt.includes('720p') || lowerTxt.includes('1080p') || lowerTxt.includes('4k') || lowerTxt.includes('download')) {
-        let quality = 'Standard';
-        if (lowerTxt.includes('2160p') || lowerTxt.includes('4k')) quality = '4K';
-        else if (lowerTxt.includes('1080p')) quality = '1080p';
-        else if (lowerTxt.includes('720p')) quality = '720p';
-        else if (lowerTxt.includes('480p')) quality = '480p';
+                links.push({
+                    title: text || "Download Link",
+                    url: href,
+                    quality
+                });
+            }
+        });
 
-        links.push({ label: txt, url: href, quality });
-      }
-    });
-
-    // Simple deduplication
-    const uniqueLinks = [];
-    const seen = new Set();
-    links.forEach(l => {
-      if(!seen.has(l.url)) { seen.add(l.url); uniqueLinks.push(l); }
-    });
-
-    res.status(200).json({ title, poster, links: uniqueLinks });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+        res.status(200).json({ title, poster, links });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 }
