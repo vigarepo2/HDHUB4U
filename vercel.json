@@ -3,7 +3,7 @@
   "rewrites": [
     { "source": "/api/search", "destination": "/api/search.js" },
     { "source": "/api/details", "destination": "/api/details.js" },
-    { "source": "/api/extract", "destination": "/api/extract.js" },
+    { "source": "/api/resolve", "destination": "/api/resolve.js" },
     { "source": "/", "destination": "/index.html" }
   ]
 }
