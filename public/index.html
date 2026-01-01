@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HDHub Vercel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .loader { border: 3px solid rgba(255,255,255,0.1); border-top-color: #10b981; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <nav class="sticky top-0 z-50 glass px-6 py-4 mb-8">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-500 cursor-pointer" onclick="renderHome()">
+                HDHub<span class="text-white font-light">Vercel</span>
+            </h1>
+        </div>
+    </nav>
+
+    <main id="app" class="flex-grow max-w-6xl mx-auto w-full px-4 pb-20"></main>
+
+    <script>
+        const app = document.getElementById('app');
+
+        // --- VIEWS ---
+
+        async function renderHome(query = '') {
+            app.innerHTML = `
+                <div class="max-w-xl mx-auto mb-10 relative">
+                    <input type="text" id="searchInput" placeholder="Search movies..." value="${query}"
+                        class="w-full bg-slate-800 border border-slate-700 rounded-full py-3 px-6 pl-12 focus:outline-none focus:border-emerald-500 transition text-white">
+                    <i data-lucide="search" class="absolute left-4 top-3.5 text-slate-500 w-5 h-5"></i>
+                </div>
+                <div id="grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                    <div class="col-span-full text-center py-10"><div class="loader mx-auto"></div></div>
+                </div>
+            `;
+            lucide.createIcons();
+
+            // Handle Search
+            const input = document.getElementById('searchInput');
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') renderHome(input.value);
+            });
+
+            // Fetch Data
+            try {
+                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                
+                const grid = document.getElementById('grid');
+                if(data.length === 0) {
+                    grid.innerHTML = '<div class="col-span-full text-center text-slate-500">No results found.</div>';
+                    return;
+                }
+
+                grid.innerHTML = data.map(item => `
+                    <div class="group cursor-pointer" onclick="renderDetails('${encodeURIComponent(item.link)}')">
+                        <div class="aspect-[2/3] relative rounded-xl overflow-hidden mb-3 bg-slate-800">
+                            <img src="${item.img}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                <i data-lucide="play" class="fill-white text-white w-12 h-12"></i>
+                            </div>
+                        </div>
+                        <h3 class="font-medium text-sm line-clamp-2 text-slate-300 group-hover:text-emerald-400 transition">${item.title}</h3>
+                    </div>
+                `).join('');
+                lucide.createIcons();
+            } catch (e) {
+                document.getElementById('grid').innerHTML = '<div class="text-red-500 text-center">Error loading content</div>';
+            }
+        }
+
+        async function renderDetails(encodedUrl) {
+            app.innerHTML = `<div class="text-center py-20"><div class="loader mx-auto"></div></div>`;
+            
+            try {
+                const res = await fetch(`/api/details?url=${encodedUrl}`);
+                const data = await res.json();
+
+                app.innerHTML = `
+                    <button onclick="renderHome()" class="mb-6 flex items-center gap-2 text-slate-400 hover:text-white transition">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+                    </button>
+                    <div class="grid md:grid-cols-[300px_1fr] gap-8">
+                        <div><img src="${data.poster}" class="w-full rounded-xl shadow-2xl sticky top-24"></div>
+                        <div>
+                            <h1 class="text-3xl font-bold mb-6">${data.title}</h1>
+                            
+                            <div id="resultArea" class="hidden mb-8 p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-xl animate-pulse">
+                                <h3 class="text-emerald-400 font-bold mb-2">Link Generated!</h3>
+                                <div class="bg-black/30 p-3 rounded text-xs font-mono text-slate-300 break-all mb-3 select-all" id="finalLink"></div>
+                                <a id="openBtn" target="_blank" class="inline-block bg-emerald-600 text-white px-6 py-2 rounded font-bold hover:bg-emerald-500">Open Link</a>
+                            </div>
+
+                            <div class="space-y-3">
+                                ${data.links.map(link => `
+                                    <div class="flex items-center justify-between bg-slate-800/50 p-4 rounded-xl border border-slate-700 hover:border-slate-600 transition">
+                                        <div class="overflow-hidden mr-4">
+                                            <span class="text-xs font-bold px-2 py-1 rounded bg-slate-700 text-slate-300 mr-2">${link.quality}</span>
+                                            <span class="text-sm font-medium truncate">${link.label}</span>
+                                        </div>
+                                        <button onclick="extractLink('${encodeURIComponent(link.url)}', this)" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded text-sm font-medium transition min-w-[100px]">
+                                            Generate
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+            } catch (e) {
+                app.innerHTML = '<div class="text-red-500 text-center">Error loading details</div>';
+            }
+        }
+
+        async function extractLink(url, btn) {
+            const originalText = btn.innerText;
+            btn.innerText = '...';
+            btn.disabled = true;
+            
+            try {
+                const res = await fetch(`/api/extract?url=${url}`);
+                const data = await res.json();
+                
+                if (data.url) {
+                    const resultArea = document.getElementById('resultArea');
+                    const finalLink = document.getElementById('finalLink');
+                    const openBtn = document.getElementById('openBtn');
+                    
+                    finalLink.innerText = data.url;
+                    openBtn.href = data.url;
+                    
+                    resultArea.classList.remove('hidden');
+                    resultArea.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    alert('Extraction failed. The link might be dead.');
+                }
+            } catch (e) {
+                alert('Server error during extraction.');
+            }
+            
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+
+        // Init
+        renderHome();
+    </script>
+</body>
+</html>
